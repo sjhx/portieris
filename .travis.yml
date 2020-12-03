@@ -1,20 +1,7 @@
 language: go
 
 go:
-  - "1.10"
-
-cache:
-  bundler: true
-
-services:
-  - docker
-
-before_script:
-  - make test-deps
+  - "1.14.7"
 
 script:
-  - make vet
-  - make fmt
-  - make lint
-  - make copyright-check
-  - make test
+  - make alltests

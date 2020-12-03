@@ -1,4 +1,4 @@
-// Copyright 2018 Portieris Authors.
+// Copyright 2020 Portieris Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package utils
 
 import (
+	"os"
 	"testing"
 
 	uuid "github.com/satori/go.uuid"
@@ -23,11 +24,21 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// CreateImagePolicyInstalledNamespace ...
 func CreateImagePolicyInstalledNamespace(t *testing.T, fw *framework.Framework, manifestPath string) *corev1.Namespace {
 	ns := uuid.NewV4().String()
 	imagePolicy, err := fw.LoadImagePolicyManifest(manifestPath)
 	if err != nil {
-		t.Fatalf("error loading %q ImagePolicy manifest: %v", imagePolicy.Name, err)
+		t.Fatalf("error loading %q ImagePolicy manifest: %v", manifestPath, err)
+	}
+	for idx := range imagePolicy.Spec.Repositories {
+		if imagePolicy.Spec.Repositories[idx].Policy.Vulnerability.ICCRVA.Account == "ENV" {
+			imagePolicy.Spec.Repositories[idx].Policy.Vulnerability.ICCRVA.Account = os.Getenv("E2E_ACCOUNT_HEADER")
+			if imagePolicy.Spec.Repositories[idx].Policy.Vulnerability.ICCRVA.Account == "" {
+				t.Fatalf("Unable to set Account header, did you export E2E_ACCOUNT_HEADER")
+			}
+			t.Log(imagePolicy.Spec.Repositories[idx].Policy.Vulnerability.ICCRVA.Account)
+		}
 	}
 	namespace, err := fw.CreateNamespaceWithIPS(ns)
 	if err != nil {
@@ -40,12 +51,14 @@ func CreateImagePolicyInstalledNamespace(t *testing.T, fw *framework.Framework, 
 	return namespace
 }
 
+// CleanUpImagePolicyTest ...
 func CleanUpImagePolicyTest(t *testing.T, fw *framework.Framework, namespace string) {
 	if err := fw.DeleteNamespace(namespace); err != nil {
 		t.Logf("failed to delete namespace %q: %v", namespace, err)
 	}
 }
 
+// UpdateImagePolicy ...
 func UpdateImagePolicy(t *testing.T, fw *framework.Framework, manifestPath, namespace, oldPolicy string) {
 	imagePolicy, err := fw.LoadImagePolicyManifest(manifestPath)
 	if err != nil {

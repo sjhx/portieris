@@ -1,4 +1,4 @@
-vendor
+code-generator
 cover.*
 
 *.tgz
@@ -6,3 +6,5 @@ cover.*
 bin
 .idea
 .go-version
+
+helm/portieris/certs/*

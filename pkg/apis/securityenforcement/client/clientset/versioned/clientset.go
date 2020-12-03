@@ -19,8 +19,9 @@ limitations under the License.
 package versioned
 
 import (
+	"fmt"
+
 	securityenforcementv1beta1 "github.com/IBM/portieris/pkg/apis/securityenforcement/client/clientset/versioned/typed/securityenforcement/v1beta1"
-	glog "github.com/golang/glog"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -29,8 +30,6 @@ import (
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
 	SecurityenforcementV1beta1() securityenforcementv1beta1.SecurityenforcementV1beta1Interface
-	// Deprecated: please explicitly pick a version if possible.
-	Securityenforcement() securityenforcementv1beta1.SecurityenforcementV1beta1Interface
 }
 
 // Clientset contains the clients for groups. Each group has exactly one
@@ -45,12 +44,6 @@ func (c *Clientset) SecurityenforcementV1beta1() securityenforcementv1beta1.Secu
 	return c.securityenforcementV1beta1
 }
 
-// Deprecated: Securityenforcement retrieves the default version of SecurityenforcementClient.
-// Please explicitly pick a version.
-func (c *Clientset) Securityenforcement() securityenforcementv1beta1.SecurityenforcementV1beta1Interface {
-	return c.securityenforcementV1beta1
-}
-
 // Discovery retrieves the DiscoveryClient
 func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 	if c == nil {
@@ -60,9 +53,14 @@ func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 }
 
 // NewForConfig creates a new Clientset for the given config.
+// If config's RateLimiter is not set and QPS and Burst are acceptable,
+// NewForConfig will generate a rate-limiter in configShallowCopy.
 func NewForConfig(c *rest.Config) (*Clientset, error) {
 	configShallowCopy := *c
 	if configShallowCopy.RateLimiter == nil && configShallowCopy.QPS > 0 {
+		if configShallowCopy.Burst <= 0 {
+			return nil, fmt.Errorf("Burst is required to be greater than 0 when RateLimiter is not set and QPS is set to greater than 0")
+		}
 		configShallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(configShallowCopy.QPS, configShallowCopy.Burst)
 	}
 	var cs Clientset
@@ -74,7 +72,6 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 
 	cs.DiscoveryClient, err = discovery.NewDiscoveryClientForConfig(&configShallowCopy)
 	if err != nil {
-		glog.Errorf("failed to create the DiscoveryClient: %v", err)
 		return nil, err
 	}
 	return &cs, nil

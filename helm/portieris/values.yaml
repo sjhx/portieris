@@ -3,41 +3,75 @@
 # Declare variables to be passed into your templates.
 
 replicaCount: 3
-namespace: ibm-system
 
 image:
-  host: docker.io/ibmcom
+  host:
+  pullSecret:
   image: portieris
-  tag: 0.5.2
+  tag: 0.9.2next
   pullPolicy: Always
 
 service:
   type: ClusterIP
   port: 443
   targetPort: 8000
+  metricsPort: 8080
+
+securityContext:
+  runAsUser: 1000060001
 
 # If not running on IBM Cloud Container Service set to false
 IBMContainerService: true
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #  cpu: 100m
-  #  memory: 128Mi
-  # requests:
-  #  cpu: 100m
-  #  memory: 128Mi
+# If managing portieris-certs secret externally
+SkipSecretCreation: false
+
+# If using cert-manager to handle secrets
+UseCertManager: false
+
+# Resoures defined to assist scheduling
+# request is typical x10, limit is typical x100
+resources:
+  limits:
+    cpu: 400m
+    memory: 600Mi
+  requests:
+    cpu: 40m
+    memory: 60Mi
 
 nodeSelector: {}
 
 tolerations: []
 
-affinity: {}
+# Affinity settings
+# the `podAntiAffinity` defined here results in the distribution of pods over nodes where possible
+# intended to improve availability in the face of node and zone instability, reducing the potential of admission deadlock
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - portieris
+        topologyKey: "kubernetes.io/hostname"
+      weight: 50
+    - podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - portieris
+        topologyKey: "failure-domain.beta.kubernetes.io/zone"
+      weight: 50
 
-# Not recommended for user to configure this. Hyperkube image to use when creating custom resources
-hyperkube:
-  repository: quay.io/coreos/hyperkube
-  tag: v1.7.6_coreos.0
+# Allow an annotation to be used to skip the webhook. This is required for Portieris to be able to
+# self heal when it has no running pods, which could otherwise deadlock your cluster after an
+# outage.
+# However, if this is enabled, anyone with access to annotate namespaces could bypass Portieris by
+# setting the annotation on their namespaces. Therefore, be careful with your RBAC policies if you
+# enable this option!
+AllowAdmissionSkip: false

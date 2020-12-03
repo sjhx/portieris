@@ -1,4 +1,4 @@
-// Copyright 2018 Portieris Authors.
+// Copyright 2018, 2020 Portieris Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package fakeregistry
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/IBM/portieris/pkg/registry"
@@ -54,6 +55,14 @@ func (fake *FakeRegistry) GetContentTrustToken(username, password, imageRepo, ho
 	return fake.getContentTrustTokenReturns.token, fake.getContentTrustTokenReturns.err
 }
 
+// NoAnonymousContentTrustTokenStub ...
+func (fake *FakeRegistry) NoAnonymousContentTrustTokenStub(username, password, imageRepo, hostname string) (string, error) {
+	if username == "" {
+		return "", fmt.Errorf("not allowed")
+	}
+	return fake.getContentTrustTokenReturns.token, fake.getContentTrustTokenReturns.err
+}
+
 // GetContentTrustTokenReturns ...
 func (fake *FakeRegistry) GetContentTrustTokenReturns(token string, err error) {
 	fake.getContentTrustTokenMutex.Lock()
@@ -62,4 +71,9 @@ func (fake *FakeRegistry) GetContentTrustTokenReturns(token string, err error) {
 		token string
 		err   error
 	}{token, err}
+}
+
+// GetRegistryToken ...
+func (fake *FakeRegistry) GetRegistryToken(username, password, imageRepo, hostname string) (string, error) {
+	return "", fmt.Errorf("not implemented")
 }

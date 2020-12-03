@@ -1,4 +1,4 @@
-// Copyright 2018 Portieris Authors.
+// Copyright 2018,2020 Portieris Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -90,5 +90,20 @@ func (a *AdmissionResponder) ToAdmissionResponse(err error) {
 
 // StringToAdmissionResponse adds a string as an error to the response
 func (a *AdmissionResponder) StringToAdmissionResponse(msg string) {
+	glog.Info(msg)
 	a.errors = append(a.errors, msg)
+}
+
+// StringsToAdmissionResponse adds a slice of strings as errors to the response
+func (a *AdmissionResponder) StringsToAdmissionResponse(msgs []string) {
+	for _, msg := range msgs {
+		a.StringToAdmissionResponse(msg)
+	}
+}
+
+// MapStringsToAdmissionResponse adds a map of a slice of strings as errors to the reponse
+func (a *AdmissionResponder) MapStringsToAdmissionResponse(mapofmsgs map[string][]string) {
+	for _, msgs := range mapofmsgs {
+		a.StringsToAdmissionResponse(msgs)
+	}
 }

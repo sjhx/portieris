@@ -1,0 +1,77 @@
+apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
+kind: ImagePolicy
+metadata:
+  name: default
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "1"
+spec:
+   repositories:
+    # This policy prevents Portieris from denying its own updates. Do not remove this policy or portieris may not function correctly.
+    - name: "{{ .Values.image.host | default "docker.io/ibmcom"  }}/{{ .Values.image.image }}"
+---
+apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
+kind: ImagePolicy
+metadata:
+  name: default
+  namespace: kube-system
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "1"
+spec:
+   repositories:
+    # This permissive policy allows all images to be deployed into this namespace. 
+    # IMPORTANT: Review this policy and replace it with one that meets your requirements.
+    - name: "*"
+    {{ if .Values.IBMContainerService }}   
+    # These policies allow all IBM Cloud Container Service images to deploy in this namespace.
+    # IMPORTANT: When you create your own policy in this namespace, be sure to retain these policies. If you do not, the cluster might not update or function properly.
+    - name: "registry*.bluemix.net/armada/*"
+    - name: "registry*.bluemix.net/armada-worker/*"
+    - name: "registry*.bluemix.net/armada-master/*"
+    - name: "*.icr.io/armada/*"
+    - name: "*.icr.io/armada-worker/*"
+    - name: "*.icr.io/armada-master/*"
+    - name: "icr.io/armada/*"
+    - name: "icr.io/armada-worker/*"
+    - name: "icr.io/armada-master/*"
+    {{ end }}
+---
+{{ if .Values.IBMContainerService }}
+apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
+kind: ImagePolicy
+metadata:
+  name: default
+  namespace: ibm-system
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "1"
+spec:
+   repositories:
+    # These policies allow all IBM Cloud Container Service images to deploy in this namespace.
+    # IMPORTANT: When you create your own policy in this namespace, make sure to retain these policies. If you do not, the cluster might not update or function properly.
+    - name: "registry*.bluemix.net/armada/*"
+    - name: "registry*.bluemix.net/armada-worker/*"
+    - name: "registry*.bluemix.net/armada-master/*"
+    - name: "*.icr.io/armada/*"
+    - name: "*.icr.io/armada-worker/*"
+    - name: "*.icr.io/armada-master/*"
+    - name: "icr.io/armada/*"
+    - name: "icr.io/armada-worker/*"
+    - name: "icr.io/armada-master/*"
+    - name: "icr.io/ext/istio/*"
+---
+{{ end }}
+apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: default
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "1"
+spec:
+   repositories:
+    # This permissive policy allows all images in namespaces which do not have an ImagePolicy.
+    # IMPORTANT: Review this policy and replace it with one that meets your requirements.
+    - name: "*"

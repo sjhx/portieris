@@ -1,4 +1,4 @@
-// Copyright 2018 Portieris Authors.
+// Copyright 2018,2020 Portieris Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,11 +32,11 @@ var (
 
 	noInstall bool
 
-	testTrustImagePolicy, testTrustClusterImagePolicy, testArmada, testVAImagePolicy, testVAClusterImagePolicy, testWildcardImagePolicy, testGeneric bool
+	testTrustImagePolicy, testTrustClusterImagePolicy, testArmada, testVAImagePolicy, testVAClusterImagePolicy, testWildcardImagePolicy, testGeneric, testSimpleImagePolicy, testVulnerability bool
 )
 
 const (
-	ChartName            = "ibmcloud-image-enforcement"
+	ChartName            = "portieris"
 	MutatingWebhookName  = "image-admission-config"
 	AdmissionWebhookName = "image-admission-config"
 )
@@ -51,6 +51,8 @@ func TestMain(m *testing.M) {
 	flag.BoolVar(&testVAClusterImagePolicy, "va-cluster-image-policy", false, "runs va tests for cluster image policies")
 	flag.BoolVar(&testWildcardImagePolicy, "wildcards-image-policy", false, "runs tests for wildcards in image policies")
 	flag.BoolVar(&testGeneric, "generic", false, "runs generic enforment tests")
+	flag.BoolVar(&testSimpleImagePolicy, "simple-image-policy", false, "runs tests for simple signing policies")
+	flag.BoolVar(&testVulnerability, "vulnerability", false, "runs tests for vulnerability enforcement")
 
 	flag.Parse()
 
@@ -72,8 +74,9 @@ func TestMain(m *testing.M) {
 
 	if !noInstall {
 		// Check for deployment
-		if err := framework.WaitForDeployment(fmt.Sprintf("%v-%v", framework.HelmRelease, ChartName), framework.Namespace, time.Minute); err != nil {
-			log.Printf("error waiting for deployment to appear: %v\n", err)
+		deploymentName := fmt.Sprintf("%v-%v", framework.HelmRelease, ChartName)
+		if err := framework.WaitForDeployment(deploymentName, framework.Namespace, time.Minute); err != nil {
+			log.Printf("error waiting for deployment %s in %s to appear: %v\n", deploymentName, framework.Namespace, err)
 			os.Exit(1)
 		}
 

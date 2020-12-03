@@ -15,28 +15,57 @@
 package oauth
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/golang/glog"
 )
 
-var client = &http.Client{
-	Timeout: 10 * time.Minute,
-	Transport: &http.Transport{
-		Dial: (&net.Dialer{
-			Timeout:   5 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).Dial,
-		DisableKeepAlives:   false,
-		MaxIdleConnsPerHost: 10,
-		TLSHandshakeTimeout: 5 * time.Second,
-	},
+// GetHTTPClient gets an http client to use for getting an oauth token
+// Takes the following as input:
+//   customFile - Path to custom ca certificate
+// Returns:
+//   *http.Client
+func GetHTTPClient(customFile string) *http.Client {
+	rootCA, err := x509.SystemCertPool()
+	customCA, err := ioutil.ReadFile(customFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			glog.Infof("CA not provided at %s, will use default system pool", customFile)
+		} else {
+			glog.Fatalf("Could not read %s: %s", customFile, err)
+		}
+	} else {
+		rootCA.AppendCertsFromPEM(customCA)
+	}
+
+	client := &http.Client{
+		Timeout: 10 * time.Minute,
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).Dial,
+			DisableKeepAlives:   false,
+			MaxIdleConnsPerHost: 10,
+			TLSHandshakeTimeout: 5 * time.Second,
+			TLSClientConfig: &tls.Config{
+				// Avoid fallback by default to SSL protocols < TLS1.2
+				MinVersion:               tls.VersionTLS12,
+				PreferServerCipherSuites: true,
+				RootCAs:                  rootCA,
+			},
+		},
+	}
+	return client
 }
 
 // Request is a helper for getting an OAuth token from the Registry OAuth Service.
@@ -46,7 +75,7 @@ var client = &http.Client{
 //   username            - Username for the OAuth request, identifies the type of token being passed in. Valid usernames are token (for registry token), iambearer, iamapikey, bearer (UAA bearer (legacy)), iamrefresh
 //   writeAccessRequired - Whether or not you require write (push and delete) access as well as read (pull)
 //   service             - The service you are retrieving the OAuth token for. Current services are either "notary" or "registry"
-//   hostname            - Hostname of the registry you wish to call e.g. https://registry.ng.bluemix.net
+//   hostname            - Hostname of the registry you wish to call e.g. https://icr.io
 // Returns:
 //   *auth.TokenResponse - Details of the type is here https://github.ibm.com/alchemy-registry/registry-types/tree/master/auth#type-tokenresponse
 //                         Token is the element you will need to forward to the registry/notary as part of a Bearer Authorization Header
@@ -59,6 +88,8 @@ func Request(token string, repo string, username string, writeAccessRequired boo
 	} else {
 		actions = "pull"
 	}
+
+	client := GetHTTPClient("/etc/certs/ca.pem")
 
 	resp, err := client.PostForm(hostname+"/oauth/token", url.Values{
 		"service":    {service},

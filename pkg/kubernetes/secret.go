@@ -1,4 +1,4 @@
-// Copyright 2018 Portieris Authors.
+// Copyright 2018, 2020 Portieris Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@
 package kubernetes
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,12 +29,31 @@ type Auths struct {
 	Registries RegistriesStruct `json:"auths"`
 }
 
-// RegistriesStruct is a map of registries
-type RegistriesStruct map[string]struct {
+// RegistriesStruct is a map of registries to their credentials
+type RegistriesStruct map[string]RegistryCredentials
+
+// RegistryCredentials defines the fields stored per registry in an docker config secret
+type RegistryCredentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Email    string `json:"email"`
 	Auth     string `json:"auth"`
+}
+
+// GetSecretKey obtains the "key" data from the named secret
+func (w *Wrapper) GetSecretKey(namespace, secretName string) ([]byte, error) {
+	// Retrieve secret
+	secret, err := w.CoreV1().Secrets(namespace).Get(secretName, metav1.GetOptions{})
+	if err != nil {
+		glog.Error("Error: ", err)
+		return nil, err
+	}
+	glog.Infof("Found secret %s", secretName)
+	// Obtain the key data
+	if key, ok := secret.Data["key"]; ok {
+		return key, nil
+	}
+	return nil, fmt.Errorf("Secret %q in %q does not contain a \"key\" attribute", secretName, namespace)
 }
 
 // GetSecretToken retrieve the token (password field) for the given namespace/secret/registry
@@ -68,11 +89,69 @@ func (w *Wrapper) GetSecretToken(namespace, secretName, registry string) (string
 	// Determine if there is a secret for the specified registry
 	registries := auths.Registries
 	if login, ok := registries[registry]; ok {
-		username = login.Username
-		password = login.Password
+		username, password = w.extractRegistryCredentials(login)
 	} else {
-		err = fmt.Errorf("Secret not defined for registry: %s", registry)
+		err = fmt.Errorf("Secret %s not defined for registry: %s", secretName, registry)
 	}
 	// glog.Infof("getSecretToken >> : token(%s)", token)
 	return username, password, err
+}
+
+func (w *Wrapper) extractRegistryCredentials(creds RegistryCredentials) (username, password string) {
+	username = creds.Username
+	password = creds.Password
+
+	if creds.Auth == "" {
+		return
+	}
+
+	decoder := base64.StdEncoding
+	if !strings.HasSuffix(strings.TrimSpace(creds.Auth), "=") {
+		// Modify the decoder to be raw if no padding is present
+		decoder = decoder.WithPadding(base64.NoPadding)
+	}
+
+	base64Decoded, err := decoder.DecodeString(creds.Auth)
+	if err != nil {
+		glog.Warningf("Error Base64 decoding auth field, username/password fields from the registry credentials will be used instead. Error %v", err)
+		return
+	}
+
+	// SplitN required here so that a colon inside the password is not treated as another delimiter
+	splitted := strings.SplitN(string(base64Decoded), ":", 2)
+	if len(splitted) != 2 {
+		glog.Warning("Decoded auth field was not in the format username:password, the username/password fields from the registry credentials will be used instead.")
+		return
+	}
+
+	username = splitted[0]
+	password = splitted[1]
+
+	return
+}
+
+// GetBasicCredentials retrieves username, password from a named secret
+func (w *Wrapper) GetBasicCredentials(namespace, name string) (string, string, error) {
+
+	if name == "" {
+		return "", "", nil
+	}
+
+	// Retrieve secret
+	secret, err := w.CoreV1().Secrets(namespace).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return "", "", err
+	}
+
+	username, ok := secret.Data["username"]
+	if !ok {
+		return "", "", fmt.Errorf("secret: %s, does not contain username", name)
+	}
+
+	password, ok := secret.Data["password"]
+	if !ok {
+		return "", "", fmt.Errorf("secret: %s, does not contain password", name)
+	}
+
+	return string(username), string(password), nil
 }
